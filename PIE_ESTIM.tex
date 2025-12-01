@@ -1,0 +1,163 @@
+\documentclass[12pt, a4paper]{article}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{float}
+
+% --- Configuration ---
+\geometry{top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
+
+% --- Code Style ---
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\lstdefinestyle{mystyle}{
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    frame=single
+}
+\lstset{style=mystyle}
+
+% --- Title Page ---
+\title{
+    \textbf{Project 8: Randomized Algorithms} \\
+    \large Empirical Analysis of Monte Carlo Integration Techniques \\
+    \large (Basic Sampling vs. Variance Reduction Strategies)
+}
+\author{Your Name}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+Monte Carlo methods are a class of computational algorithms that rely on repeated random sampling to obtain numerical results. They are particularly essential in high-dimensional integration and physics simulations where deterministic methods are computationally infeasible.
+
+This project implements and analyzes three approaches to estimating the value of $\pi$ using the geometric ratio of a circle inscribed in a square:
+\begin{enumerate}
+    \item \textbf{Basic Monte Carlo}: Purely random sampling (the control group).
+    \item \textbf{Stratified Sampling}: A variance reduction technique that enforces uniform distribution via grids.
+    \item \textbf{Antithetic Variates}: A technique exploiting negative correlation to cancel out variance.
+\end{enumerate}
+
+Our goal is to empirically demonstrate that while all methods converge to $\pi$, \textbf{Variance Reduction Techniques (VRT)} significantly lower the standard error for the same number of samples ($N$), improving efficiency without increasing time complexity.
+
+\section{Theoretical Background}
+
+\subsection{The Geometric Model}
+Consider a unit square with side length $1$ and an inscribed quarter-circle with radius $r=1$.
+\begin{itemize}
+    \item Area of Square = $1 \times 1 = 1$.
+    \item Area of Quarter Circle = $\frac{\pi r^2}{4} = \frac{\pi}{4}$.
+\end{itemize}
+If we uniformly sample $N$ points $(x, y)$ in the square, the probability $P$ of a point falling inside the circle is $P = \frac{\pi}{4}$. Thus, the estimator is:
+\begin{equation}
+    \hat{\pi} = 4 \times \frac{N_{inside}}{N}
+\end{equation}
+
+\subsection{Variance Reduction Techniques}
+The standard error of the basic estimator decreases at a slow rate of $O(1/\sqrt{N})$. To improve this, we modify the sampling distribution.
+
+\subsubsection{Stratified Sampling}
+Stratified sampling divides the domain into homogeneous subgroups (strata). We divide the unit square into an $M \times M$ grid. We enforce that exactly one point is sampled from each grid cell.
+\textbf{Mechanism:} This prevents "clumping" of random points (where multiple points hit the same empty space), ensuring a perfectly uniform spread across the domain.
+
+\subsubsection{Antithetic Variates}
+This method exploits \textbf{negative correlation}. For every random point $U$ generated, we also use its complement $1-U$.
+\textbf{Mechanism:} If a point $(u, v)$ is near 0 (likely inside), its pair $(1-u, 1-v)$ is near 1 (likely outside). Averaging these pairs reduces the variance of the estimator compared to independent samples.
+
+\section{Implementation \& Complexity Analysis}
+
+\subsection{Asymptotic Complexity}
+The performance of Monte Carlo simulations is dominated by the generation of random numbers and the geometric check ($x^2 + y^2 \le 1$).
+
+\begin{table}[h]
+    \centering
+    \begin{tabular}{@{}lcc@{}}
+    \toprule
+    \textbf{Algorithm} & \textbf{Time Complexity} & \textbf{Space Complexity} \\ \midrule
+    Basic Monte Carlo & $O(N)$ & $O(1)$ \\
+    Stratified Sampling & $O(N)$ & $O(1)$ \\
+    Antithetic Variates & $O(N)$ & $O(1)$ \\ \bottomrule
+    \end{tabular}
+    \caption{Theoretical Complexity Analysis (where $N$ is the sample size)}
+\end{table}
+
+\textbf{Analysis:}
+\begin{itemize}
+    \item \textbf{Time:} All three methods are linear $O(N)$. For Stratified sampling, calculating the grid offset is a constant time operation $O(1)$ per point.
+    \item \textbf{Space:} Unlike sorting algorithms, we do not need to store the points. We only maintain a running counter of `inside` points, resulting in constant $O(1)$ auxiliary space.
+\end{itemize}
+
+\subsection{Design Choices \& Data Structures}
+\begin{itemize}
+    \item \textbf{RNG Engine (Mersenne Twister):} The standard C++ `rand()` is linear congruential and has low period/quality. For simulations up to $N=10^6$, we utilized `std::mt19937`. This ensures high-dimensional equidistribution, which is critical for the validity of the Monte Carlo assumption.
+    \item \textbf{Floating Point Precision:} We utilized `double` precision for all coordinate calculations. Using `float` would introduce rounding errors that could bias the boundary checks ($x^2 + y^2 \approx 1$).
+\end{itemize}
+
+\subsection{Implementation Challenges}
+\begin{enumerate}
+    \item \textbf{Grid Logic Mapping:} Implementing Stratified Sampling required careful index mapping. We mapped a 2D loop indices $(i, j)$ to global coordinates: $x = (i + \text{rand}) / \text{grid\_size}$. This ensures the random point stays strictly within its assigned stratum.
+    \item \textbf{Comparison Fairness:} To ensure a fair benchmark, Stratified Sampling was restricted to sample sizes that were perfect squares (e.g., $100, 10000$), or adjusted to the nearest grid configuration, while maintaining the same total $N$ as the Basic method.
+\end{enumerate}
+
+\section{Empirical Analysis \& Results}
+
+\subsection{Error Convergence (Accuracy vs. N)}
+We compared the absolute error $|\hat{\pi} - \pi_{real}|$ across logarithmic scales of $N$.
+\begin{itemize}
+    \item \textbf{Basic Sampling:} Follows the expected erratic convergence.
+    \item \textbf{Stratified Sampling:} Consistently exhibits lower error than Basic sampling by an order of magnitude. The "smoothing" effect of the grid logic is clearly visible.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{error_convergence_log.png}
+    \caption{Log-Log plot of Error Convergence. Stratified Sampling (Green) consistently maintains a lower error floor compared to Basic Random sampling (Red).}
+\end{figure}
+
+\subsection{Estimation Stability (The Funnel)}
+Figure 2 illustrates the "Funnel of Certainty." At low $N$ ($<1000$), the estimates fluctuate wildly. As $N$ approaches $10^6$, the values stabilize tightly around the true value of $\pi$ ($3.14159\dots$). The Antithetic method shows slightly tighter bounds than Basic, but Stratified remains the most stable.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{estimation_funnel.png}
+    \caption{Estimation Funnel showing the tightening of confidence intervals as sample size increases.}
+\end{figure}
+
+\subsection{Computational Cost (Scalability)}
+A key concern with Variance Reduction is potential overhead. Our runtime analysis confirms that the cost of coordinate arithmetic in Stratified/Antithetic methods is negligible compared to the random number generation itself.
+The lines in the log-log plot overlap perfectly, confirming that all methods scale linearly $O(N)$.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{execution_time.png}
+    \caption{Execution Time vs Sample Size. The overlap indicates no significant performance penalty for using advanced sampling methods.}
+\end{figure}
+
+\section{Conclusion}
+This project successfully demonstrated the trade-offs in Monte Carlo integration.
+\begin{itemize}
+    \item \textbf{Basic Monte Carlo} is simple to implement but converges slowly.
+    \item \textbf{Stratified Sampling} is the superior method for low-dimensional problems. It reduces the standard error significantly without adding computational complexity ($O(N)$).
+\end{itemize}
+Our empirical data validates that structural constraints (grids) are more effective at reducing variance than purely probabilistic tricks (antithetic variates) for this specific geometric problem.
+
+\end{document}

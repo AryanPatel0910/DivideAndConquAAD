@@ -1,0 +1,155 @@
+\documentclass[12pt, a4paper]{article}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{float}
+
+% --- Configuration ---
+\geometry{top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
+
+% --- Code Style ---
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\lstdefinestyle{mystyle}{
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    frame=single
+}
+\lstset{style=mystyle}
+
+% --- Title Page ---
+\title{
+    \textbf{Project 8: Divide \& ConquAAD} \\
+    \large Empirical Analysis of Quicksort Variants \\
+    \large (Standard vs. Randomized vs. Dual-Pivot)
+}
+\author{Laksh Mittal}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+Sorting is a fundamental operation in computer science, serving as a building block for search algorithms, data compression, and complexity analysis. Among comparison-based sorting algorithms, \textbf{Quicksort} is widely regarded as the most efficient in practice due to its cache locality and low overhead.
+
+However, the standard deterministic implementation suffers from a severe vulnerability: its performance degrades to $O(n^2)$ on sorted or reverse-sorted data. This project implements and empirically compares three variants to analyze their robustness and scalability:
+\begin{enumerate}
+    \item \textbf{Standard Quicksort:} The textbook Lomuto partition scheme.
+    \item \textbf{Randomized Quicksort:} A Las Vegas algorithm that selects random pivots to defeat adversarial inputs.
+    \item \textbf{Dual-Pivot Quicksort:} An advanced variant (used in Java's \texttt{Arrays.sort}) that uses two pivots to reduce recursion depth.
+\end{enumerate}
+
+\section{Theoretical Background}
+
+\subsection{Standard Quicksort (Lomuto)}
+Quicksort is a Divide and Conquer algorithm. The core operation is \textit{Partitioning}.
+\textbf{Mechanism:} Given an array $A[low \dots high]$, the algorithm selects the last element $A[high]$ as the \textbf{pivot}. It rearranges the array such that all elements smaller than the pivot are to its left, and all elements greater are to its right. It then recursively sorts the sub-arrays.
+
+\textbf{The Flaw:} If the array is already sorted, the pivot (last element) is always the maximum. The partition produces one sub-problem of size $n-1$ and one of size $0$. This creates a recursion tree of height $n$, leading to $O(n^2)$ complexity.
+
+\subsection{Randomized Quicksort}
+To mitigate the worst-case scenario, we introduce randomness into the pivot selection.
+\textbf{Mechanism:} Before partitioning, we select a random index $r \in [low, high]$ and swap $A[r]$ with $A[high]$.
+\begin{equation}
+    P(\text{Worst Case}) \approx 0
+\end{equation}
+By sampling the pivot uniformly at random, the algorithm becomes agnostic to the input pattern. The probability of consistently picking bad pivots becomes astronomically low ($1/n!$), ensuring an expected runtime of $O(n \log n)$ on \textit{any} input.
+
+\subsection{Dual-Pivot Quicksort}
+Proposed by Yaroslavskiy in 2009, this variation uses two pivots, $P_1$ and $P_2$ (where $P_1 \le P_2$).
+\textbf{Mechanism:} The array is partitioned into three regions:
+\begin{enumerate}
+    \item Elements $< P_1$
+    \item Elements between $P_1$ and $P_2$
+    \item Elements $> P_2$
+\end{enumerate}
+This reduces the height of the recursion tree (logarithm base changes from 2 to 3) and effectively reduces the number of memory accesses, often yielding better performance on large datasets.
+
+\section{Implementation \& Complexity Analysis}
+
+\subsection{Asymptotic Complexity}
+\begin{table}[h]
+    \centering
+    \begin{tabular}{@{}lccc@{}}
+    \toprule
+    \textbf{Algorithm} & \textbf{Best Case} & \textbf{Average Case} & \textbf{Worst Case} \\ \midrule
+    Standard Quicksort & $O(n \log n)$ & $O(n \log n)$ & $O(n^2)$ \\
+    Randomized Quicksort & $O(n \log n)$ & $O(n \log n)$ & $O(n^2)$ (Probabilistic) \\
+    Dual-Pivot Quicksort & $O(n \log n)$ & $O(n \log n)$ & $O(n^2)$ \\ \bottomrule
+    \end{tabular}
+    \caption{Theoretical Time Complexity Comparison}
+\end{table}
+
+\textbf{Space Complexity:} All three variants are in-place sorts, requiring $O(1)$ auxiliary memory for swapping. However, they require $O(\log n)$ stack space for recursion. In the worst case (Standard Quicksort on Sorted Data), this stack usage grows to $O(n)$, which causes Stack Overflow errors on large inputs.
+
+\subsection{Implementation Details \& Design Choices}
+\begin{itemize}
+    \item \textbf{Language \& Environment:} Implemented in C++ to minimize runtime overhead. We used \texttt{std::chrono::high\_resolution\_clock} for microsecond-precision timing.
+    \item \textbf{Data Structures:} \texttt{std::vector<int>} was used for dynamic array management. Vectors provide contiguous memory allocation, which is critical for leveraging the cache locality benefits of Quicksort.
+    \item \textbf{Random Number Generation:} We used the standard \texttt{rand()} function seeded with \texttt{time(0)}. While not cryptographically secure, it provides sufficient uniform distribution for pivot selection in algorithmic benchmarking.
+\end{itemize}
+
+\subsection{Implementation Challenges}
+\begin{enumerate}
+    \item \textbf{Stack Overflow on Sorted Inputs:} During the testing of Standard Quicksort on sorted arrays of size $N > 10,000$, the recursion depth reached $N$, causing segmentation faults. We restricted the sorted tests to $N=20,000$ to maintain stability.
+    \item \textbf{Accurate Benchmarking:} For small $N$, the execution time was dominated by OS noise. To counter this, we implemented a loop that runs each test case 20 times, collecting raw data points to visualize the variance (shown in error bands) rather than just simple averages.
+\end{enumerate}
+
+\section{Empirical Analysis \& Results}
+
+\subsection{Performance on Random Inputs (Average Case)}
+We tested all variants on random permutations of integers. As illustrated in Figure 1, all three algorithms exhibit $O(n \log n)$ growth.
+
+\begin{itemize}
+    \item \textbf{Observation:} The lines for Standard (Red) and Randomized (Green) are nearly identical. This confirms that on random data, the "last element" strategy of Standard Quicksort effectively acts as a random pivot.
+    \item \textbf{Dual-Pivot Advantage:} The Dual-Pivot implementation (Blue) is consistently faster as $N$ increases. This validates the theory that ternary partitioning (splitting into 3 parts) reduces the recursion depth and improves cache efficiency.
+    \item \textbf{The Cache Cliff:} A noticeable spike occurs between $N=5000$ and $N=10000$. This nonlinear jump is attributed to the dataset exceeding the CPU's L1 Cache size, forcing slower L2/L3 cache access.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{random_performance.png}
+    \caption{Runtime on Random Arrays. Dual-Pivot shows slight superiority.}
+\end{figure}
+
+\subsection{The "Sorted Array" Vulnerability (Worst Case)}
+The true differentiation occurs when the input is already sorted.
+\begin{itemize}
+    \item \textbf{Standard Quicksort Failure:} The runtime explodes quadratically ($O(n^2)$). At $N=20,000$, Standard Quicksort took $\approx 947$ ms.
+    \item \textbf{Randomized Resilience:} Randomized Quicksort maintained its $O(n \log n)$ performance, sorting the same $N=20,000$ array in just $\approx 1.5$ ms. This represents a speedup factor of \textbf{600x}.
+    \item \textbf{Dual-Pivot Determinism:} Interestingly, our deterministic Dual-Pivot implementation also degraded on sorted inputs (taking $\approx 180$ ms), though it was roughly $5\times$ faster than Standard Quicksort. This proves that Dual-Pivot also requires randomization to be truly robust against sorted adversaries.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{sorted_performance.png}
+    \caption{Runtime on Sorted Arrays. Standard Quicksort degrades to quadratic time; Randomized remains efficient.}
+\end{figure}
+
+\section{Conclusion}
+This project empirically validated the theoretical bounds of Quicksort variants.
+\begin{enumerate}
+    \item \textbf{Randomization is non-negotiable} for robustness. Without it, Quicksort is dangerously vulnerable to sorted inputs, degrading to bubble-sort-like performance ($O(n^2)$).
+    \item \textbf{Dual-Pivot is the superior architecture} for general cases, offering tangible speedups on random data due to reduced recursion depth.
+    \item \textbf{Best Practice:} The ideal sorting algorithm (like \texttt{std::sort} or Java's sort) combines these insights: using Dual-Pivot partitioning combined with randomized pivot selection (or falling back to Heapsort via Introsort) to guarantee safety and speed.
+\end{enumerate}
+
+\end{document}
