@@ -1,0 +1,174 @@
+\documentclass[12pt, a4paper]{article}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{float}
+
+% --- Configuration ---
+\geometry{top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
+
+% --- Code Style ---
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\lstdefinestyle{mystyle}{
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    frame=single
+}
+\lstset{style=mystyle}
+
+% --- Title Page ---
+\title{
+    \textbf{Project 8: Divide \& ConquAAD} \\
+    \large Empirical Analysis of Randomized Primality Algorithms \\
+    \large (Miller-Rabin vs. Fermat's Little Theorem)
+}
+\author{Laksh Mittal}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+Primality testing is the backbone of modern cryptography, specifically RSA, which relies on the difficulty of factoring the product of two large primes. Since deterministic tests like trial division are exponentially slow ($O(\sqrt{n})$), practical applications rely on \textbf{Randomized Algorithms} (Monte Carlo methods).
+
+This project implements and analyzes two such algorithms:
+\begin{enumerate}
+    \item \textbf{Fermat's Primality Test}: A fast but flawed method based on modular exponentiation.
+    \item \textbf{Miller-Rabin Primality Test}: A robust probabilistic algorithm that patches Fermat's flaws.
+\end{enumerate}
+
+Our goal is to empirically demonstrate the failure of Fermat's test on \textbf{Carmichael Numbers} and prove the superior accuracy and scalability of Miller-Rabin using 2048-bit integers.
+
+\section{Theoretical Background}
+
+\subsection{Fermat's Little Theorem (FLT)}
+\textbf{Theorem:} If $p$ is a prime number, then for any integer $a$ such that $1 < a < p$:
+\begin{equation}
+    a^{p-1} \equiv 1 \pmod p
+\end{equation}
+\textbf{The Flaw:} The converse is not true. Composite numbers that satisfy this condition are called \textit{Fermat Pseudoprimes}.
+\textbf{Carmichael Numbers:} These are "absolute pseudoprimes" (e.g., 561, 1105) that satisfy $a^{n-1} \equiv 1 \pmod n$ for \textit{all} coprime bases $a$. Fermat's test fails 100\% of the time on these numbers (assuming no lucky factor hits).
+
+\subsection{Miller-Rabin Algorithm}
+Miller-Rabin improves FLT by looking for \textbf{non-trivial square roots of unity}.
+
+\textbf{Key Lemma:} If $n$ is prime, the only solutions to $x^2 \equiv 1 \pmod n$ are $x \equiv 1$ and $x \equiv -1$.
+
+\textbf{Algorithm Logic:}
+Let $n-1 = d \cdot 2^r$ (where $d$ is odd).
+For a random base $a$, we compute the sequence:
+\[ a^d, a^{2d}, a^{4d}, \dots, a^{2^{r-1}d} \pmod n \]
+If $n$ is prime, the sequence must end in 1, and the element immediately preceding the first 1 must be $-1$. If we see a 1 preceded by something else, $n$ is composite.
+
+\subsection{Probabilistic Error Bound}
+Miller-Rabin is a Monte Carlo algorithm. If it says "Composite", it is certainly composite (0\% error). If it says "Prime", it may be wrong.
+\textbf{Theorem (Rabin, 1980):} For any odd composite $n$, at least $3/4$ of the bases $a \in [2, n-2]$ are witnesses.
+\[ P(\text{Error after } k \text{ trials}) \le \frac{1}{4^k} \]
+For $k=5$, the error probability is $\le 1/1024 \approx 0.09\%$.
+
+\section{Implementation \& Complexity Analysis}
+
+\subsection{Asymptotic Complexity}
+The performance of both algorithms is dominated by the cost of Modular Exponentiation.
+\begin{table}[h]
+    \centering
+    \begin{tabular}{@{}lcc@{}}
+    \toprule
+    \textbf{Metric} & \textbf{Time Complexity} & \textbf{Space Complexity} \\ \midrule
+    Modular Exponentiation & $O(\log^3 n)$ & $O(\log n)$ \\
+    Fermat Test ($k$ trials) & $O(k \log^3 n)$ & $O(\log n)$ \\
+    Miller-Rabin Test ($k$ trials) & $O(k \log^3 n)$ & $O(\log n)$ \\ \bottomrule
+    \end{tabular}
+    \caption{Theoretical Complexity Analysis (where $n$ is the input number)}
+\end{table}
+
+\textbf{Analysis:}
+\begin{itemize}
+    \item \textbf{Time:} With the GMP library, multiplication of large numbers (size $N = \log n$) takes roughly $O(N^{1.6})$ to $O(N^2)$. Since exponentiation requires $O(N)$ multiplications, the total time is approximately $O(\log^3 n)$.
+    \item \textbf{Space:} We require $O(\log n)$ bits to store the number $n$ itself. Since the algorithms are iterative (not recursive), the auxiliary space remains proportional to the bit-length of the input.
+\end{itemize}
+
+\subsection{Design Choices \& Data Structures}
+\begin{itemize}
+    \item \textbf{High-Precision Library (GMP):} Standard C++ types (\texttt{unsigned long long}) overflow at 64 bits ($1.8 \times 10^{19}$). To test 2048-bit keys ($10^{616}$), we utilized the \textbf{GNU Multiple Precision (GMP)} library. The \texttt{mpz\_class} data structure handles arbitrary-precision integers by dynamically allocating "limbs" (arrays of machine words) in heap memory.
+    \item \textbf{Strategy Pattern:} We implemented an abstract base class \texttt{PrimalityTester} with a pure virtual function \texttt{test(n, k)}. This allowed us to hot-swap algorithms at runtime using polymorphism, ensuring fair benchmarking conditions.
+\end{itemize}
+
+\subsection{Implementation Challenges}
+\begin{enumerate}
+    \item \textbf{Randomness Granularity:} Standard \texttt{std::rand()} is limited to 32 bits. Generating a cryptographically secure 2048-bit random base $a$ required using \texttt{gmp\_randclass} seeded with a high-entropy source.
+    \item \textbf{Handling Carmichael Numbers:} Generating the "Ground Truth" dataset was difficult because Carmichael numbers are rare. We solved this by using Python's \texttt{sympy} library to generate verifiable test cases before feeding them into the C++ benchmarking harness.
+\end{enumerate}
+
+\section{Empirical Analysis \& Results}
+
+\subsection{The "Carmichael Trap" (Accuracy)}
+We tested both algorithms against a dataset of Carmichael numbers.
+\begin{itemize}
+    \item \textbf{Fermat (k=1):} Exhibited a $\approx 100\%$ failure rate (False Positives). It treats Carmichael numbers indistinguishably from primes because the FLT condition holds.
+    \item \textbf{Miller-Rabin (k=5):} Exhibited a $0\%$ failure rate. The algorithm correctly identified the numbers as composite by finding non-trivial square roots of unity.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{carmichael_failure.png}
+    \caption{Failure Rates on Carmichael Numbers. Fermat fails completely; Miller-Rabin succeeds.}
+\end{figure}
+
+\subsection{Error Convergence (Accuracy vs. Iterations)}
+To validate the theoretical error bound $P(E) \le 4^{-k}$, we ran the Miller-Rabin test on Carmichael numbers while increasing $k$ from 1 to 10.
+As shown in Figure 2, the error rate drops exponentially. By $k=2$, the empirical error rate is already negligible, confirming that Miller-Rabin converges to the truth extremely quickly.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{convergence_analysis.png}
+    \caption{Empirical error rate drops sharply, strictly adhering to the theoretical bound $4^{-k}$.}
+\end{figure}
+
+\subsection{Runtime Variance (Prime vs Composite)}
+A key property of Las Vegas/Monte Carlo algorithms is runtime variance.
+\begin{itemize}
+    \item \textbf{Composites (Fast):} The algorithm returns \texttt{false} immediately upon finding the first "witness". Since $3/4$ of bases are witnesses, this usually happens in the first few modular exponentiations.
+    \item \textbf{Primes (Slow):} The algorithm must exhaustively run all $k$ iterations to build confidence.
+\end{itemize}
+This behavior results in a bimodal runtime distribution, where composites are processed significantly faster than primes.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{variance_analysis.png}
+    \caption{Runtime Variance. Primes show tight grouping (worst-case), while Composites show high variance but lower average time (best-case).}
+\end{figure}
+
+\subsection{Scalability ($O(k \log^3 n)$)}
+Finally, we analyzed the scalability across bit lengths $n \in [128, 2048]$. The log-log plot demonstrates a linear relationship, confirming the polynomial time complexity of $O(\log^3 n)$ for modular exponentiation.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{runtime_comparison.png}
+    \caption{Log-Log plot showing polynomial time complexity.}
+\end{figure}
+
+\section{Conclusion}
+This project successfully demonstrated that while Fermat's test is computationally lighter, it is cryptographically unsafe due to Carmichael numbers. The Miller-Rabin algorithm solves this by leveraging the properties of modular square roots.
+Our empirical data validates the theoretical error bound of $4^{-k}$, showing that just 5 iterations are sufficient for 2048-bit primality testing with high confidence.
+
+\end{document}
